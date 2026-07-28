@@ -1,60 +1,41 @@
-// Simulates a real backend call with network delay.
-// Used by createAsyncThunk in postsSlice (Assignment 2 - Async Data Handling).
+// Conceptual / mock API layer.
+// Simulates network latency and a chance of failure so the UI's loading,
+// error, retry and toast logic has something real to react to.
 
-const MOCK_POSTS = [
-  {
-    id: "p1",
-    platformId: "pl1",
-    content: "Excited to launch our new product line today!",
-    author: "Alice",
-    createdAt: "2026-07-01T09:00:00.000Z",
-  },
-  {
-    id: "p2",
-    platformId: "pl2",
-    content: "Behind the scenes photo from our office.",
-    author: "Bob",
-    createdAt: "2026-07-02T10:30:00.000Z",
-  },
-  {
-    id: "p3",
-    platformId: "pl1",
-    content: "Quick tip of the day: always test your reducers.",
-    author: "Alice",
-    createdAt: "2026-07-03T12:15:00.000Z",
-  },
-  {
-    id: "p4",
-    platformId: "pl3",
-    content:
-      "A longer post explaining our roadmap for the next quarter in detail, including feature plans, timelines and the team responsible for each milestone.",
-    author: "Charlie",
-    createdAt: "2026-07-04T08:45:00.000Z",
-  },
-];
+const FAIL_RATE = 0.3; // 30% simulated failure, so retry logic is exercised
 
-const MOCK_PLATFORMS = [
-  { id: "pl1", name: "Twitter / X" },
-  { id: "pl2", name: "Instagram" },
-  { id: "pl3", name: "LinkedIn" },
-];
-
-// Simulate network latency and an occasional failure path (never triggered by
-// default, but the flag makes it easy to test the "rejected" thunk state).
-export function fetchPostsFromServer({ shouldFail = false } = {}) {
+function simulateNetwork(payload, { forceFail = false } = {}) {
   return new Promise((resolve, reject) => {
     setTimeout(() => {
-      if (shouldFail) {
-        reject(new Error("Failed to fetch posts from server"));
-      } else {
-        resolve(MOCK_POSTS);
+      const shouldFail = forceFail || Math.random() < FAIL_RATE;
+      if (!payload?.content?.trim()) {
+        reject({ error: "Invalid data: content is empty" });
+        return;
       }
+      if (shouldFail) {
+        reject({ error: "Network error: failed to reach server" });
+        return;
+      }
+      resolve({ success: true, id: payload.id ?? Date.now().toString() });
     }, 800);
   });
 }
 
-export function fetchPlatformsFromServer() {
-  return new Promise((resolve) => {
-    setTimeout(() => resolve(MOCK_PLATFORMS), 400);
-  });
+export function saveDraftMock(draft) {
+  return simulateNetwork(draft);
+}
+
+export function updateDraftMock(draft) {
+  return simulateNetwork(draft);
+}
+
+// Generic retry wrapper with a fixed retry budget.
+// Retries only the async operation itself; UI state is managed by the caller.
+export async function retry(fn, retries = 2) {
+  try {
+    return await fn();
+  } catch (err) {
+    if (retries > 0) return retry(fn, retries - 1);
+    throw err;
+  }
 }
